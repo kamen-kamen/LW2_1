@@ -14,17 +14,69 @@ find_package(Qt6 COMPONENTS
         Widgets
         REQUIRED)
 
-add_executable(LW2 main.cpp
+# ==============================================================
+# БИБЛИОТЕКА С ЛОГИКОЙ (Date)
+# ==============================================================
+
+add_library(date_lib
         date/back/Date.cpp
         date/back/Date.h
+)
+
+target_link_libraries(date_lib
+        Qt::Core
+)
+
+# ==============================================================
+# ОСНОВНОЕ ПРИЛОЖЕНИЕ
+# ==============================================================
+
+add_executable(LW2
+        main.cpp
         date/front/mainwindow.h
         date/front/mainwindow.cpp
-        date/front/mainwindow.ui)
+        date/front/mainwindow.ui
+)
+
 target_link_libraries(LW2
         Qt::Core
         Qt::Gui
         Qt::Widgets
+        date_lib
 )
+
+# ==============================================================
+# GOOGLE TEST
+# ==============================================================
+
+find_package(GTest QUIET)
+if(NOT GTest_FOUND)
+    message(STATUS "Google Test not found, downloading...")
+    include(FetchContent)
+    FetchContent_Declare(
+            googletest
+            URL https://github.com/google/googletest/archive/refs/tags/v1.16.0.zip
+    )
+    FetchContent_MakeAvailable(googletest)
+endif()
+
+enable_testing()
+
+add_executable(all_tests
+        tests/test_date.cpp
+)
+
+target_link_libraries(all_tests
+        gtest_main
+        date_lib
+)
+
+include(GoogleTest)
+gtest_discover_tests(all_tests)
+
+# ==============================================================
+# QT DLL КОПИРОВАНИЕ (ТВОЙ НИЗ — НЕ ТРОНУТ)
+# ==============================================================
 
 if (WIN32 AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     set(DEBUG_SUFFIX)
@@ -52,5 +104,5 @@ if (WIN32 AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
                 COMMAND ${CMAKE_COMMAND} -E copy
                 "${QT_INSTALL_PATH}/bin/Qt6${QT_LIB}${DEBUG_SUFFIX}.dll"
                 "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
-    endforeach (QT_LIB)
+    endforeach ()
 endif ()
