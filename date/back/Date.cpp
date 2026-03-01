@@ -1,5 +1,7 @@
 #include "date.h"
-#include <QDate> // Используем только для получения системного времени в конструкторе
+#include <QDate>
+#include <stdexcept>
+#include <cmath>
 
 Date::Date() {
     QDate current = QDate::currentDate();
@@ -17,37 +19,44 @@ bool Date::isLeap() const {
 }
 
 int Date::daysInMonth(int m, int y) const {
-    int days[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-    if (m == 2 && ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)))
+    static const int days[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    if (m == 2 && ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0))) {
         return 29;
+    }
     return days[m];
 }
 
 void Date::setDate(int d, int m, int y) {
     if (y < 1 || m < 1 || m > 12 || d < 1 || d > daysInMonth(m, y)) {
-        // Выбрасываем исключение для блока try-catch
-        throw std::invalid_argument("Некорректная дата: " + std::to_string(d) + "." + std::to_string(m) + "." + std::to_string(y));
+        throw std::invalid_argument("Invalid date parameters");
     }
-    day = d; month = m; year = y;
+    day = d;
+    month = m;
+    year = y;
 }
 
-// Перевод даты в количество дней от начала эры (для удобного вычитания)
 long long Date::toTotalDays() const {
-    long long total = year * 365 + year / 4 - year / 100 + year / 400;
-    int daysInMonths[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    long long y = year - 1;
+    long long total = y * 365 + y / 4 - y / 100 + y / 400;
+
+    static const int daysInMonths[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
     for (int i = 1; i < month; ++i) {
         total += daysInMonths[i];
     }
-    if (month > 2 && isLeap()) total++;
+
+    if (month > 2 && isLeap()) {
+        total++;
+    }
+
     total += day;
     return total;
 }
 
-// 1. NextDay
 Date Date::nextDay() const {
     int d = day + 1;
     int m = month;
     int y = year;
+
     if (d > daysInMonth(m, y)) {
         d = 1;
         m++;
@@ -59,11 +68,11 @@ Date Date::nextDay() const {
     return Date(d, m, y);
 }
 
-// 2. PreviousDay
 Date Date::previousDay() const {
     int d = day - 1;
     int m = month;
     int y = year;
+
     if (d < 1) {
         m--;
         if (m < 1) {
@@ -75,36 +84,41 @@ Date Date::previousDay() const {
     return Date(d, m, y);
 }
 
-// 3. WeekNumber (Упрощенный расчет)
 short Date::weekNumber() const {
     int dayOfYear = 0;
-    for (int i = 1; i < month; i++) dayOfYear += daysInMonth(i, year);
+    for (int i = 1; i < month; i++) {
+        dayOfYear += daysInMonth(i, year);
+    }
     dayOfYear += day;
-    return (dayOfYear / 7) + 1;
+    return static_cast<short>((dayOfYear / 7) + 1);
 }
 
-// 4. Duration (разница модулей дней)
 int Date::duration(Date otherDate) const {
-    long long t1 = this->toTotalDays();
-    long long t2 = otherDate.toTotalDays();
-    return std::abs(t1 - t2);
+    return std::abs(static_cast<int>(this->toTotalDays() - otherDate.toTotalDays()));
 }
 
-// 5. DaysTillYourBirthday
 int Date::daysTillYourBirthday(Date birthdayDate) const {
-    // Создаем дату дня рождения в ТЕКУЩЕМ году
-    Date bdayThisYear(birthdayDate.getDay(), birthdayDate.getMonth(), this->year);
+    int bDay = birthdayDate.day;
+    int bMonth = birthdayDate.month;
 
-    long long currentTotal = this->toTotalDays();
+    if (bDay == 29 && bMonth == 2 && !isLeap()) {
+        bDay = 28;
+    }
+
+    Date bdayThisYear(bDay, bMonth, year);
+    long long currentTotal = toTotalDays();
     long long bdayTotal = bdayThisYear.toTotalDays();
 
     if (bdayTotal >= currentTotal) {
-        return bdayTotal - currentTotal;
-    } else {
-        // Если день рождения уже прошел, считаем до следующего года
-        Date bdayNextYear(birthdayDate.getDay(), birthdayDate.getMonth(), this->year + 1);
-        return bdayNextYear.toTotalDays() - currentTotal;
+        return static_cast<int>(bdayTotal - currentTotal);
     }
+
+    if (bDay == 29 && bMonth == 2 && !Date(1, 1, year + 1).isLeap()) {
+        bDay = 28;
+    }
+
+    Date bdayNextYear(bDay, bMonth, year + 1);
+    return static_cast<int>(bdayNextYear.toTotalDays() - currentTotal);
 }
 
 QString Date::toString() const {

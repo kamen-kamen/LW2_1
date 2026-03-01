@@ -6,7 +6,11 @@
 #include <QDebug>
 #include <QFile>
 #include <QRegularExpression>
-#include <QTableWidgetItem> // Обязательно для работы с таблицей
+#include <QTableWidgetItem>
+#include <QHeaderView>
+
+
+enum Columns { ColDate, ColNext, ColLeap, ColDiff, ColCount };
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -14,9 +18,9 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // Инициализация таблицы
-    ui->tableWidget->setColumnCount(4);
+    ui->tableWidget->setColumnCount(ColCount);
     ui->tableWidget->setHorizontalHeaderLabels({"Дата", "След. день", "Високосный", "Разница (дни)"});
+    ui->tableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 }
 
 MainWindow::~MainWindow()
@@ -42,17 +46,22 @@ void MainWindow::on_btnOpen_clicked()
     QString content = in.readAll();
     file.close();
 
-    // Регулярное выражение для поиска дат формата DD.MM.YYYY
     QStringList tokens = content.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
 
     for (const QString &token : tokens) {
         QStringList parts = token.split('.');
         if (parts.size() == 3) {
-            try {
-                Date newDate(parts[0].toInt(), parts[1].toInt(), parts[2].toInt());
-                dates.push_back(newDate);
-            } catch (...) {
-                qDebug() << "Некорректная дата в файле:" << token;
+            bool okD, okM, okY;
+            int d = parts[0].toInt(&okD);
+            int m = parts[1].toInt(&okM);
+            int y = parts[2].toInt(&okY);
+
+            if (okD && okM && okY) {
+                try {
+                    dates.emplace_back(d, m, y);
+                } catch (...) {
+                    qDebug() << "Invalid date in file:" << token;
+                }
             }
         }
     }
@@ -61,7 +70,6 @@ void MainWindow::on_btnOpen_clicked()
 
 void MainWindow::on_btnAdd_clicked()
 {
-    // Используем QDateEdit (стандартный виджет Qt)
     QDate qDt = ui->dateEditAdd->date();
 
     try {
@@ -82,9 +90,9 @@ void MainWindow::on_btnCalcBday_clicked()
     QDate qDt = ui->dateEditBday->date();
     try {
         Date bday(qDt.day(), qDt.month(), qDt.year());
-        Date current; // Текущая системная дата
+        Date current;
         int days = current.daysTillYourBirthday(bday);
-        ui->lblResult->setText("До дня рождения: " + QString::number(days) + " дн.");
+        ui->lblResult->setText(QString("До дня рождения: %1 дн.").arg(days));
     } catch (...) {
         ui->lblResult->setText("Ошибка расчета");
     }
@@ -92,22 +100,23 @@ void MainWindow::on_btnCalcBday_clicked()
 
 void MainWindow::updateTable()
 {
+    ui->tableWidget->setSortingEnabled(false);
     ui->tableWidget->setRowCount(0);
-    ui->tableWidget->setRowCount(dates.size());
 
-    for (int i = 0; i < (int)dates.size(); ++i) {
-        Date next = dates[i].nextDay();
-        QString diffStr = "-";
+    for (size_t i = 0; i < dates.size(); ++i) {
+        int row = ui->tableWidget->rowCount();
+        ui->tableWidget->insertRow(row);
 
-        if (i < (int)dates.size() - 1) {
-            diffStr = QString::number(dates[i].duration(dates[i+1]));
-        }
+        QString diffStr = (i < dates.size() - 1)
+            ? QString::number(dates[i].duration(dates[i + 1]))
+            : "-";
 
-        ui->tableWidget->setItem(i, 0, new QTableWidgetItem(dates[i].toString()));
-        ui->tableWidget->setItem(i, 1, new QTableWidgetItem(next.toString()));
-        ui->tableWidget->setItem(i, 2, new QTableWidgetItem(dates[i].isLeap() ? "Да" : "Нет"));
-        ui->tableWidget->setItem(i, 3, new QTableWidgetItem(diffStr));
+        ui->tableWidget->setItem(row, ColDate, new QTableWidgetItem(dates[i].toString()));
+        ui->tableWidget->setItem(row, ColNext, new QTableWidgetItem(dates[i].nextDay().toString()));
+        ui->tableWidget->setItem(row, ColLeap, new QTableWidgetItem(dates[i].isLeap() ? "Да" : "Нет"));
+        ui->tableWidget->setItem(row, ColDiff, new QTableWidgetItem(diffStr));
     }
+    ui->tableWidget->setSortingEnabled(true);
 }
 
 void MainWindow::saveDateToFile(const Date& date)
